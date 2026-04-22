@@ -51,12 +51,14 @@ async def find_traces(
     results can be used with get_trace() for full detail, or cross-referenced
     with Loki logs containing the same trace_id.
     """
-    now_us = int(time.time() * 1e6)
+    now_us = int(time.time() * 1_000_000)
     params = {"service": service, "limit": limit}
 
+    # Jaeger expects microseconds as an INTEGER string, not a float.
+    # Previously "start=<float>.0" made Jaeger return 400 Bad Request.
     if start.endswith("m"):
         minutes = int(start.rstrip("m"))
-        params["start"] = str(now_us - minutes * 60 * 1e6)
+        params["start"] = str(now_us - minutes * 60 * 1_000_000)
     else:
         params["start"] = start
 
