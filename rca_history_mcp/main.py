@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 import aiosqlite
 from fastapi import FastAPI, Query
+from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="RCA History MCP Server", version="0.1.0", lifespan=lifespan)
+install_metrics(app)
 
 
 @app.get("/health")

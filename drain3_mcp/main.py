@@ -10,6 +10,7 @@ import os
 
 import httpx
 from fastapi import FastAPI, Query
+from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 TRIAGE_URL = os.getenv("TRIAGE_SERVICE_URL", "http://triage-service:8090")
 
 app = FastAPI(title="Drain3 MCP Server", version="0.1.0")
+install_metrics(app)
 client = httpx.AsyncClient(timeout=10)
 
 

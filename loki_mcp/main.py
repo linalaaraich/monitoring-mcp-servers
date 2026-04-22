@@ -11,6 +11,7 @@ import time
 
 import httpx
 from fastapi import FastAPI, Query
+from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
 MAX_LINES = 50
 
 app = FastAPI(title="Loki MCP Server", version="0.1.0")
+install_metrics(app)
 client = httpx.AsyncClient(timeout=15)
 
 
