@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 import aiosqlite
 from fastapi import FastAPI, Query
+from pydantic import BaseModel
 from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
@@ -265,6 +266,127 @@ async def get_similar_decisions(
         "count": len(records),
         "records": records,
     }
+
+
+# -----------------------------------------------------------------------------
+# Phase 6 (2026-06-03) — list_feedback tool
+#
+# Sister to get_low_rated_examples_for_alert: that endpoint surfaces ONLY
+# operator overrides; list_feedback returns ALL feedback rows (rate /
+# override / confirm) for the (alert_name, service) pair so the LLM can
+# read the broader operator-wisdom corpus on demand. This is the tool the
+# LLM picks via bounded-agency when it wants to know "what have operators
+# generally said about this kind of alert?" without restricting to a
+# single feedback_type.
+#
+# Used by the hybrid feedback-loop design: HIGH-VALUE feedback (operator
+# said verdict was wrong OR wrote an actual_cause) is ALSO injected
+# proactively in the initial prompt by the triage pipeline. This tool is
+# the broader on-demand surface — same JOIN shape, no verdict_was_right
+# filter, all feedback_types in.
+# -----------------------------------------------------------------------------
+
+
+class FeedbackRow(BaseModel):
+    """Shape returned by /tools/list_feedback per row."""
+    decision_id: str
+    when: str | None = None  # feedback created_at
+    feedback_type: str | None = None  # rate / override / confirm
+    rating: str | None = None
+    verdict_was_right: str | None = None
+    action_was_right: str | None = None
+    actual_cause: str | None = None
+    tags: str | None = None  # JSON-encoded list (kept as string for transport)
+    notes: str | None = None
+    alert_name: str | None = None
+    service: str | None = None
+
+
+class ListFeedbackResponse(BaseModel):
+    alert_name: str
+    service: str | None = None
+    days: int
+    count: int
+    records: list[FeedbackRow]
+
+
+@app.get("/tools/list_feedback", response_model=ListFeedbackResponse)
+async def list_feedback(
+    alert_name: str = Query(..., description="Alert name to match"),
+    service: str | None = Query(
+        None,
+        description="Affected service to match. Omit for alert-name-only filter.",
+    ),
+    days: int = Query(14, ge=1, le=180, description="Days to look back"),
+    limit: int = Query(5, ge=1, le=20, description="Max records to return"),
+):
+    """Return recent operator feedback rows for a given alert (+ optional service).
+
+    JOIN feedback f ON rca_history r WHERE r.alert_name = ?
+    [AND r.affected_service = ?] AND f.created_at > now-N days.
+
+    Returns all feedback_types (rate / override / confirm) ordered by
+    feedback created_at DESC. The LLM uses this to read what operators
+    have said about similar past alerts — beyond just overrides — within
+    its single bounded-agency call.
+
+    Empty list means either no operators have rated this alert pattern
+    in the window, or the alert is new. Both readings are informative;
+    fall back to first-principles reasoning if so.
+    """
+    since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    if service:
+        sql = (
+            "SELECT f.decision_id, f.created_at AS when_ts, f.feedback_type, "
+            "       f.rating, f.verdict_was_right, f.action_was_right, "
+            "       f.actual_cause, f.tags, f.notes, "
+            "       r.alert_name, r.affected_service AS service "
+            "FROM feedback f "
+            "INNER JOIN rca_history r ON r.id = f.decision_id "
+            "WHERE r.alert_name = ? AND r.affected_service = ? "
+            "  AND f.created_at > ? "
+            "ORDER BY f.created_at DESC LIMIT ?"
+        )
+        params = (alert_name, service, since, limit)
+    else:
+        sql = (
+            "SELECT f.decision_id, f.created_at AS when_ts, f.feedback_type, "
+            "       f.rating, f.verdict_was_right, f.action_was_right, "
+            "       f.actual_cause, f.tags, f.notes, "
+            "       r.alert_name, r.affected_service AS service "
+            "FROM feedback f "
+            "INNER JOIN rca_history r ON r.id = f.decision_id "
+            "WHERE r.alert_name = ? "
+            "  AND f.created_at > ? "
+            "ORDER BY f.created_at DESC LIMIT ?"
+        )
+        params = (alert_name, since, limit)
+    cursor = await db.execute(sql, params)
+    rows = await cursor.fetchall()
+    records = []
+    for row in rows:
+        d = dict(row)
+        records.append(FeedbackRow(
+            decision_id=d.get("decision_id") or "",
+            when=d.get("when_ts"),
+            feedback_type=d.get("feedback_type"),
+            rating=d.get("rating"),
+            verdict_was_right=d.get("verdict_was_right"),
+            action_was_right=d.get("action_was_right"),
+            actual_cause=d.get("actual_cause"),
+            tags=d.get("tags"),
+            notes=d.get("notes"),
+            alert_name=d.get("alert_name"),
+            service=d.get("service"),
+        ))
+
+    return ListFeedbackResponse(
+        alert_name=alert_name,
+        service=service,
+        days=days,
+        count=len(records),
+        records=records,
+    )
 
 
 @app.get("/tools/get_low_rated_examples_for_alert")
