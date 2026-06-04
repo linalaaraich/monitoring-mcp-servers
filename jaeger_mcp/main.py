@@ -12,6 +12,7 @@ import time
 
 import httpx
 from fastapi import FastAPI, Query
+from shared.errors import install_error_handlers
 from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
@@ -21,6 +22,7 @@ JAEGER_URL = os.getenv("JAEGER_URL", "http://jaeger:16686")
 
 app = FastAPI(title="Jaeger MCP Server", version="0.1.0")
 install_metrics(app)
+install_error_handlers(app)
 client = httpx.AsyncClient(timeout=15)
 
 
