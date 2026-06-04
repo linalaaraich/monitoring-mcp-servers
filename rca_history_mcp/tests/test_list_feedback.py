@@ -45,7 +45,8 @@ CREATE TABLE rca_history (
     action_taken TEXT NOT NULL,
     related_alerts TEXT,
     investigation_duration_ms INTEGER DEFAULT 0,
-    rca_quality TEXT
+    rca_quality TEXT,
+    excluded_from_lookup INTEGER DEFAULT 0
 )
 """
 
@@ -95,7 +96,11 @@ def _seed(path: str) -> None:
         ("d4", _hours_ago(1), "grafana", "OtherAlert",      "fp4", "kong",        "warning", "processed", "DISMISS",  "0.5", "rca4", "reasoning", "suppressed", None, 900,  "actionable"),
     ]
     conn.executemany(
-        "INSERT INTO rca_history VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO rca_history (id, timestamp, alert_source, alert_name, "
+        "alert_fingerprint, affected_service, severity, triage_decision, "
+        "llm_verdict, llm_confidence, rca_report, llm_reasoning, action_taken, "
+        "related_alerts, investigation_duration_ms, rca_quality) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         dec_rows,
     )
     # feedback rows. 13 columns: id, decision_id, feedback_type, operator_note,

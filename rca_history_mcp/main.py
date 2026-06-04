@@ -56,10 +56,15 @@ async def get_recent_rcas(hours: int = Query(24, ge=1, le=168, description="Hour
 
     Gives the LLM a view of recent alert activity — are alerts clustering?
     Is the system in a degraded state with multiple firing alerts?
+
+    Quarantined rows (excluded_from_lookup=1) are filtered — these are pre-fix
+    hedge/parroting outputs that would teach the LLM the wrong patterns.
     """
     since = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
     cursor = await db.execute(
-        "SELECT * FROM rca_history WHERE timestamp > ? ORDER BY timestamp DESC",
+        "SELECT * FROM rca_history WHERE timestamp > ? "
+        "AND COALESCE(excluded_from_lookup, 0) = 0 "
+        "ORDER BY timestamp DESC",
         (since,),
     )
     rows = await cursor.fetchall()
@@ -82,10 +87,14 @@ async def search_rcas(
     The LLM uses this to answer: 'Has HighP95Latency fired before? What was
     the root cause? Was it a real issue or noise?' This institutional memory
     prevents the LLM from starting each investigation from scratch.
+
+    Quarantined rows (excluded_from_lookup=1) are filtered — see Stage E.
     """
     since = (datetime.utcnow() - timedelta(days=days)).isoformat()
     cursor = await db.execute(
-        "SELECT * FROM rca_history WHERE alert_name = ? AND timestamp > ? ORDER BY timestamp DESC",
+        "SELECT * FROM rca_history WHERE alert_name = ? AND timestamp > ? "
+        "AND COALESCE(excluded_from_lookup, 0) = 0 "
+        "ORDER BY timestamp DESC",
         (alert_name, since),
     )
     rows = await cursor.fetchall()
@@ -133,14 +142,16 @@ async def get_alert_frequency(
     since = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
     cursor = await db.execute(
-        "SELECT COUNT(*) as cnt FROM rca_history WHERE alert_name = ? AND timestamp > ?",
+        "SELECT COUNT(*) as cnt FROM rca_history WHERE alert_name = ? AND timestamp > ? "
+        "AND COALESCE(excluded_from_lookup, 0) = 0",
         (alert_name, since),
     )
     count_row = await cursor.fetchone()
     count = count_row["cnt"] if count_row else 0
 
     cursor = await db.execute(
-        "SELECT timestamp, llm_verdict, action_taken FROM rca_history WHERE alert_name = ? AND timestamp > ? ORDER BY timestamp DESC",
+        "SELECT timestamp, llm_verdict, action_taken FROM rca_history WHERE alert_name = ? AND timestamp > ? "
+        "AND COALESCE(excluded_from_lookup, 0) = 0 ORDER BY timestamp DESC",
         (alert_name, since),
     )
     rows = await cursor.fetchall()
@@ -241,6 +252,7 @@ async def get_similar_decisions(
             "SELECT * FROM rca_history "
             f"WHERE alert_name = ? AND affected_service = ? "
             f"  AND timestamp > ? AND rca_quality IN ({placeholders}) "
+            "  AND COALESCE(excluded_from_lookup, 0) = 0 "
             "ORDER BY timestamp DESC LIMIT ?"
         )
         params = (alert_name, affected_service, since, *allowed_qualities, limit)
@@ -249,6 +261,7 @@ async def get_similar_decisions(
             "SELECT * FROM rca_history "
             f"WHERE alert_name = ? AND timestamp > ? "
             f"  AND rca_quality IN ({placeholders}) "
+            "  AND COALESCE(excluded_from_lookup, 0) = 0 "
             "ORDER BY timestamp DESC LIMIT ?"
         )
         params = (alert_name, since, *allowed_qualities, limit)
@@ -345,6 +358,7 @@ async def list_feedback(
             "INNER JOIN rca_history r ON r.id = f.decision_id "
             "WHERE r.alert_name = ? AND r.affected_service = ? "
             "  AND f.created_at > ? "
+            "  AND COALESCE(r.excluded_from_lookup, 0) = 0 "
             "ORDER BY f.created_at DESC LIMIT ?"
         )
         params = (alert_name, service, since, limit)
@@ -358,6 +372,7 @@ async def list_feedback(
             "INNER JOIN rca_history r ON r.id = f.decision_id "
             "WHERE r.alert_name = ? "
             "  AND f.created_at > ? "
+            "  AND COALESCE(r.excluded_from_lookup, 0) = 0 "
             "ORDER BY f.created_at DESC LIMIT ?"
         )
         params = (alert_name, since, limit)
@@ -422,6 +437,7 @@ async def get_low_rated_examples_for_alert(
         WHERE r.alert_name = ?
           AND r.timestamp > ?
           AND f.feedback_type = 'override'
+          AND COALESCE(r.excluded_from_lookup, 0) = 0
         ORDER BY f.created_at DESC
         LIMIT ?
         """,

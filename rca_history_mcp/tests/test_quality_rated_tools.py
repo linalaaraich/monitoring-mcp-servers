@@ -37,7 +37,8 @@ CREATE TABLE rca_history (
     action_taken TEXT NOT NULL,
     related_alerts TEXT,
     investigation_duration_ms INTEGER DEFAULT 0,
-    rca_quality TEXT
+    rca_quality TEXT,
+    excluded_from_lookup INTEGER DEFAULT 0
 )
 """
 
@@ -81,7 +82,11 @@ def _seed(path: str) -> None:
                                        "grafana", "HighP95Latency",  "fp6", "kong",        "warning", "processed", "ESCALATE",     "0.88", "old", "old", "emailed", None, 4000, "actionable"),
     ]
     conn.executemany(
-        "INSERT INTO rca_history VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO rca_history (id, timestamp, alert_source, alert_name, "
+        "alert_fingerprint, affected_service, severity, triage_decision, "
+        "llm_verdict, llm_confidence, rca_report, llm_reasoning, action_taken, "
+        "related_alerts, investigation_duration_ms, rca_quality) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         rows,
     )
     # One override on d_act_2 — operator disagreed with that ESCALATE.
