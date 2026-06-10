@@ -177,6 +177,9 @@ def test_similar_decisions_rejects_invalid_min_quality(client):
         "/tools/get_similar_decisions",
         params={"alert_name": "HighP95Latency", "min_quality": "magnificent"},
     )
+    # M-1 (2026-06-10): now a real 422 (4xx = bad args per the shared error
+    # contract), not a 200 with an error body. Body keys are unchanged.
+    assert r.status_code == 422
     data = r.json()
     assert "error" in data
     assert "magnificent" in data["received"]

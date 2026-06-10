@@ -13,7 +13,9 @@ from datetime import datetime, timedelta
 
 import aiosqlite
 from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from shared.errors import install_error_handlers, install_sqlite_error_handlers
 from shared.metrics import install_metrics
 
 logging.basicConfig(level=logging.INFO, format='{"time":"%(asctime)s","level":"%(levelname)s","msg":"%(message)s"}')
@@ -36,6 +38,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RCA History MCP Server", version="0.1.0", lifespan=lifespan)
 install_metrics(app)
+# M-1 (2026-06-10): the other four MCPs installed these handlers in 6dbc4a6;
+# rca_history was skipped because its upstream is SQLite, not httpx. The httpx
+# handlers are installed for symmetry/future-proofing; the sqlite handlers are
+# the real fix — an aiosqlite error (locked DB, schema drift) now maps to
+# 422 (bad query) / 502 (DB unavailable) instead of a raw 500 the triage
+# client would mis-read as a source outage.
+install_error_handlers(app)
+install_sqlite_error_handlers(app)
 
 
 @app.get("/health")
@@ -237,10 +247,17 @@ async def get_similar_decisions(
     when the pattern is new or all prior decisions were low-quality.
     """
     if min_quality not in _VALID_QUALITIES:
-        return {
-            "error": f"min_quality must be one of {_VALID_QUALITIES}",
-            "received": min_quality,
-        }
+        # M-1 (2026-06-10): was a 200 with an error body, which the triage
+        # client counted as a successful tool call. 422 matches the shared
+        # error contract (4xx = fix your args, not an outage). Body keeps the
+        # original error/received keys for any existing consumer.
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": f"min_quality must be one of {_VALID_QUALITIES}",
+                "received": min_quality,
+            },
+        )
     min_rank = _QUALITY_RANK[min_quality]
     allowed_qualities = [q for q, r in _QUALITY_RANK.items() if r >= min_rank]
 
