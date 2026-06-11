@@ -1,6 +1,6 @@
 name: build-push
 
-# Build + publish all five MCP server images to GitHub Container Registry
+# Build + publish all six MCP server images to GitHub Container Registry
 # on every push to main. Same pattern as monitoring-triage-service's
 # build-push.yml, parallelized via a matrix over the five subdirectories.
 #
@@ -22,6 +22,7 @@ on:
       - "jaeger_mcp/**"
       - "drain3_mcp/**"
       - "rca_history_mcp/**"
+      - "deploy_mcp/**"
       - "shared/**"
       - "requirements.txt"
       - ".github/workflows/build-push.yml"
@@ -36,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false    # don't cancel the other four if one fails
+      fail-fast: false    # don't cancel the others if one fails
       matrix:
         mcp:
           - { dir: prometheus_mcp,  image: mcp-prometheus }
@@ -44,6 +45,7 @@ jobs:
           - { dir: jaeger_mcp,      image: mcp-jaeger }
           - { dir: drain3_mcp,      image: mcp-drain3 }
           - { dir: rca_history_mcp, image: mcp-rca-history }
+          - { dir: deploy_mcp,      image: mcp-deploy }
 
     steps:
       - name: Checkout

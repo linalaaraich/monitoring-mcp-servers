@@ -19,6 +19,9 @@ echo "  cires/mcp-drain3 built"
 docker build -t cires/mcp-rca-history -f rca_history_mcp/Dockerfile .
 echo "  cires/mcp-rca-history built"
 
+docker build -t cires/mcp-deploy -f deploy_mcp/Dockerfile .
+echo "  cires/mcp-deploy built"
+
 echo ""
-echo "All 5 MCP images built:"
+echo "All 6 MCP images built:"
 docker images --filter "reference=cires/mcp-*" --format "  {{.Repository}}:{{.Tag}}  {{.Size}}"

@@ -24,6 +24,7 @@ import prometheus_mcp.main as prom_main
 import loki_mcp.main as loki_main
 import jaeger_mcp.main as jaeger_main
 import drain3_mcp.main as drain3_main
+import deploy_mcp.main as deploy_main
 
 
 # (module, attr-holding-the-client, endpoint, query-params) per server.
@@ -33,9 +34,10 @@ _SERVERS = [
     (loki_main, "/tools/query_logs", {"logql": '{service_name="x"}'}),
     (jaeger_main, "/tools/get_services", {}),
     (drain3_main, "/tools/get_clusters", {}),
+    (deploy_main, "/tools/recent_deploys", {"window": "2h"}),
 ]
 
-_IDS = ["prometheus", "loki", "jaeger", "drain3"]
+_IDS = ["prometheus", "loki", "jaeger", "drain3", "deploy"]
 
 
 class _FakeResponse:
